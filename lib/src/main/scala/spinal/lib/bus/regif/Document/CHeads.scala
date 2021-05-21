@@ -1,12 +1,14 @@
 package spinal.lib.bus.regif
 
+import spinal.core.widthOf
+
 object CHeads {
   def reservedRenamed(fields: List[Field], pre: String = "uint32_t") = {
     var t = ""
     fields.map{ fd =>
       val name = if (fd.accType == AccessType.NA) "na_" + t else fd.name
       if (fd.accType == AccessType.NA) t += "_"
-      s"        $pre ${name}:${fd.hardbit.getWidth};"
+      s"        $pre ${name}:${widthOf(fd.hardbit)};"
     }.mkString("\n")
   }
 

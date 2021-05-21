@@ -1,5 +1,7 @@
 package spinal.lib.bus.regif
 
+import spinal.core.widthOf
+
 object RegIfDocument{
 
   def FormatResetValue(value: BigInt, bitCount: Int):String = {
@@ -14,7 +16,7 @@ object RegIfDocument{
       s"""            <td class="${reserved}" >${Section(fd.section)}</td>
          |            <td class="${reserved}" >${fd.name}</td>
          |            <td class="${reserved}" align="center">${fd.accType}</td>
-         |            <td class="${reserved}" align="right">${FormatResetValue(fd.resetValue, fd.hardbit.getWidth)}</td>
+         |            <td class="${reserved}" align="right">${FormatResetValue(fd.resetValue, widthOf(fd.hardbit))}</td>
          |            <td class="${reserved} fixWidth2" >${fd.doc}</td>""".stripMargin
     }
 

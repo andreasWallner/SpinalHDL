@@ -43,39 +43,23 @@ class FIFOInst(name: String, addr: Long, doc:String, busif: BusIf) extends RegBa
 
 }
 
-case class BitVectorFieldBuilder[T <: BitVector](register: RegInst, dataType: HardType[T], acc: AccessType, name: String) {
+case class DataFieldBuilder[T <: Data](register: RegInst, dataType: HardType[T], acc: AccessType, name: String) {
   var reset : Option[Long] = None
   var docString : Option[String] = None
   def apply(): T = {
     register.makeField(this)
   }
-  def init(that: Long): BitVectorFieldBuilder[T] = {
+  def init(that: Long): DataFieldBuilder[T] = {
     reset = Some(that)
     this
   }
-  def doc(doc: String): BitVectorFieldBuilder[T] = {
+  def doc(doc: String): DataFieldBuilder[T] = {
     docString = Some(doc)
     this
   }
 }
 
-case class BoolFieldBuilder(register: RegInst, dataType: HardType[Bool], acc: AccessType, name: String) {
-  var reset : Option[Long] = None
-  var docString : Option[String] = None
-  def apply(): Bool = {
-    register.makeField(this)
-  }
-  def init(that: Long): BoolFieldBuilder = {
-    reset = Some(that)
-    this
-  }
-  def doc(doc: String): BoolFieldBuilder = {
-    docString = Some(doc)
-    this
-  }
-}
-
-case class RegInst(name: String, addr: Long, doc: String, busif: BusIf) extends RegBase(name, addr, doc, busif) with RegDescr {
+case class RegInst(name: String, addr: Long, doc: String, busif: BusIf) extends RegBase(name, addr, doc, busif) {
   def checkLast={
     val spareNumbers = if(fields.isEmpty) busif.busDataWidth else busif.busDataWidth-1 - fields.last.tailBitPos
     spareNumbers match {
@@ -106,19 +90,13 @@ case class RegInst(name: String, addr: Long, doc: String, busif: BusIf) extends 
     ret
   }
 
-  def typedField[T <: BitVector](dataType: T, acc: AccessType)(implicit symbol: SymbolName): BitVectorFieldBuilder[T] =
-    BitVectorFieldBuilder(this, dataType, acc, symbol.name)
+  def typedField[T <: Data](dataType: T, acc: AccessType)(implicit symbol: SymbolName): DataFieldBuilder[T] =
+    DataFieldBuilder(this, dataType, acc, symbol.name)
 
-  def typedField(dataType: Bool, acc: AccessType)(implicit symbol: SymbolName): BoolFieldBuilder =
-    BoolFieldBuilder(this, dataType, acc, symbol.name)
-
-  def makeField(builder: BoolFieldBuilder): Bool =
-    typed(Bits(1 bit), builder.acc, builder.reset.getOrElse(0), builder.docString.getOrElse(""), builder.name)(0)
-
-  def makeField[T <: BitVector](builder: BitVectorFieldBuilder[T]): T =
+  def makeField[T <: Data](builder: DataFieldBuilder[T]): T =
     typed(builder.dataType, builder.acc, builder.reset.getOrElse(0), builder.docString.getOrElse(""), builder.name)
 
-  def typed[T <: BitVector](dataType: HardType[T], acc: AccessType, resetValue: Long, doc: String, name: String): T = {
+  def typed[T <: Data](dataType: HardType[T], acc: AccessType, resetValue: Long, doc: String, name: String): T = {
     if (acc == AccessType.RO && resetValue != 0)
       SpinalError("RO field can't have a reset value")
 
@@ -170,11 +148,11 @@ case class RegInst(name: String, addr: Long, doc: String, busif: BusIf) extends 
   def getName()        : String           = name
   def getAddr()        : Long             = addr
   def getDoc()         : String           = doc
-  def getFieldDescrs() : List[FieldDescr] = getFields
+  //def getFieldDescrs() : List[FieldDescr] = getFields
 
-  def accept(vs : BusIfVisitor) = {
-      vs.visit(this)
-  }
+  //def accept(vs : BusIfVisitor) = {
+  //    vs.visit(this)
+  //}
 }
 
 abstract class RegBase(name: String, addr: Long, doc: String, busif: BusIf) {
@@ -206,9 +184,9 @@ abstract class RegBase(name: String, addr: Long, doc: String, busif: BusIf) {
     event
   }
 
-  protected def RO[T <: BitVector](dataType: HardType[T]): T = dataType()
+  protected def RO[T <: Data](dataType: HardType[T]): T = dataType()
 
-  protected def W1[T <: BitVector](dataType: HardType[T], section: Range, resetValue: Long ): T ={
+  protected def W1[T <: Data](dataType: HardType[T], section: Range, resetValue: Long ): T ={
     val ret = Reg(dataType()) init B(resetValue).as(dataType)
     val hardRestFirstFlag = Reg(Bool()) init True
     when(hitDoWrite && hardRestFirstFlag){
@@ -218,7 +196,7 @@ abstract class RegBase(name: String, addr: Long, doc: String, busif: BusIf) {
     ret
   }
 
-  protected def W[T <: BitVector](dataType: HardType[T], section: Range, resetValue: Long ): T ={
+  protected def W[T <: Data](dataType: HardType[T], section: Range, resetValue: Long ): T ={
     val ret = Reg(dataType) init B(resetValue, dataType.getBitsWidth bit).as(dataType)
     when(hitDoWrite){
       ret := busif.writeData(section).as(dataType)
@@ -226,90 +204,104 @@ abstract class RegBase(name: String, addr: Long, doc: String, busif: BusIf) {
     ret
   }
 
-  protected def RC[T <: BitVector](dataType: HardType[T], resetValue: Long): T = {
+  protected def clearAll[T <: Data](that: T): T = {
+    for(i <- 0 until widthOf(that)){
+      that.assignFromBits(B"0", i, 1 bits)
+    }
+    that
+  }
+
+  protected def setAll[T <: Data](that: T): T = {
+    for(i <- 0 until widthOf(that)){
+      that.assignFromBits(B"1", i, 1 bits)
+    }
+    that
+  }
+
+  protected def RC[T <: Data](dataType: HardType[T], resetValue: Long): T = {
     val ret = Reg(dataType) init B(resetValue).as(dataType)
-    when(hitDoRead){
-      ret.clearAll()
+    when(hitDoRead) {
+      clearAll(ret)
     }
     ret
   }
 
-  protected def RS[T <: BitVector](dataType: HardType[T], resetValue: Long): T = {
+  protected def RS[T <: Data](dataType: HardType[T], resetValue: Long): T = {
     val ret = Reg(dataType) init B(resetValue).as(dataType)
     when(hitDoWrite){
-      ret.setAll()
+      setAll(ret)
     }
     ret
   }
 
-  protected def WRC[T <: BitVector](dataType: HardType[T], section: Range, resetValue: Long): T = {
+  protected def WRC[T <: Data](dataType: HardType[T], section: Range, resetValue: Long): T = {
     val ret = Reg(dataType) init B(resetValue).as(dataType)
     when(hitDoWrite){
       ret := busif.writeData(section).as(dataType)
     }.elsewhen(hitDoRead){
-      ret.clearAll()
+      clearAll(ret)
     }
     ret
   }
 
-  protected def WRS[T <: BitVector](dataType: HardType[T], section: Range, resetValue: Long): T = {
+  protected def WRS[T <: Data](dataType: HardType[T], section: Range, resetValue: Long): T = {
     val ret = Reg(dataType) init B(resetValue).as(dataType)
     when(hitDoWrite){
       ret := busif.writeData(section).as(dataType)
     }.elsewhen(hitDoRead){
-      ret.setAll()
+      setAll(ret)
     }
     ret
   }
 
-  protected def WC[T <: BitVector](dataType: HardType[T], resetValue: Long): T = {
+  protected def WC[T <: Data](dataType: HardType[T], resetValue: Long): T = {
     val ret = Reg(dataType) init B(resetValue, dataType.getBitsWidth bit).as(dataType)
     when(hitDoWrite){
-      ret.clearAll()
+      clearAll(ret)
     }
     ret
   }
 
-  protected def WS[T <: BitVector](dataType: HardType[T], resetValue: Long): T = {
+  protected def WS[T <: Data](dataType: HardType[T], resetValue: Long): T = {
     val ret = Reg(dataType) init B(resetValue).as(dataType)
     when(hitDoWrite){
-      ret.setAll()
+      setAll(ret)
     }
     ret
   }
 
-  protected def WSRC[T <: BitVector](dataType: HardType[T], resetValue: Long): T = {
+  protected def WSRC[T <: Data](dataType: HardType[T], resetValue: Long): T = {
     val ret = Reg(dataType) init B(resetValue).as(dataType)
     when(hitDoWrite){
-      ret.setAll()
+      setAll(ret)
     }.elsewhen(hitDoRead){
-      ret.clearAll()
+      clearAll(ret)
     }
     ret
   }
 
-  protected def WCRS[T <: BitVector](dataType: HardType[T], resetValue: Long): T = {
+  protected def WCRS[T <: Data](dataType: HardType[T], resetValue: Long): T = {
     val ret = Reg(dataType) init B(resetValue).as(dataType)
     when(hitDoWrite){
-      ret.clearAll()
+      clearAll(ret)
     }.elsewhen(hitDoRead){
-      ret.setAll()
+      setAll(ret)
     }
     ret
   }
 
-  protected def WB[T <: BitVector](dataType: HardType[T], section: Range, resetValue: Long, accType: AccessType): T = {
+  protected def WB[T <: Data](dataType: HardType[T], section: Range, resetValue: Long, accType: AccessType): T = {
     val ret = Reg(dataType) init B(resetValue).as(dataType)
     when(hitDoWrite){
       for(x <- section) {
         val idx = x - section.min
         accType match {
-          case AccessType.W1C => when( busif.writeData(x)){ret(idx).clear()}
-          case AccessType.W1S => when( busif.writeData(x)){ret(idx).set()  }
-          case AccessType.W1T => when( busif.writeData(x)){ret(idx) := ~ret(idx)}
-          case AccessType.W0C => when(~busif.writeData(x)){ret(idx).clear()}
-          case AccessType.W0S => when(~busif.writeData(x)){ret(idx).set()  }
-          case AccessType.W0T => when(~busif.writeData(x)){ret(idx) := ~ret(idx)}
+          case AccessType.W1C => when( busif.writeData(x)){ ret.assignFromBits(B"0", idx, 1 bits) }
+          case AccessType.W1S => when( busif.writeData(x)){ ret.assignFromBits(B"1", idx, 1 bits) }
+          case AccessType.W1T => when( busif.writeData(x)){ ret.assignFromBits((~ret.asBits(idx)).asBits, idx, 1 bits) }
+          case AccessType.W0C => when(~busif.writeData(x)){ ret.assignFromBits(B"0", idx, 1 bits) }
+          case AccessType.W0S => when(~busif.writeData(x)){ ret.assignFromBits(B"1", idx, 1 bits) }
+          case AccessType.W0T => when(~busif.writeData(x)){ ret.assignFromBits((~ret.asBits(idx)).asBits, idx, 1 bits) }
           case _ =>
         }
       }
@@ -317,26 +309,26 @@ abstract class RegBase(name: String, addr: Long, doc: String, busif: BusIf) {
     ret
   }
 
-  protected def WBR[T <: BitVector](dataType: HardType[T], section: Range, resetValue: Long, accType: AccessType): T ={
+  protected def WBR[T <: Data](dataType: HardType[T], section: Range, resetValue: Long, accType: AccessType): T = {
     val ret = Reg(dataType) init B(resetValue).as(dataType)
     for(x <- section) {
       val idx = x - section.min
       accType match {
         case AccessType.W1SRC => {
-          when(hitDoWrite && busif.writeData(x)) {ret(idx).set()}
-            .elsewhen(hitDoRead)                 {ret(idx).clear()}
+          when(hitDoWrite && busif.writeData(x)) { ret.assignFromBits(B"1", idx, 1 bits) }
+            .elsewhen(hitDoRead)                 { ret.assignFromBits(B"0", idx, 1 bits) }
         }
         case AccessType.W1CRS => {
-          when(hitDoWrite && busif.writeData(x)) {ret(idx).clear()}
-            .elsewhen(hitDoRead)                 {ret(idx).set()}
+          when(hitDoWrite && busif.writeData(x)) { ret.assignFromBits(B"1", idx, 1 bits) }
+            .elsewhen(hitDoRead)                 { ret.assignFromBits(B"0", idx, 1 bits) }
         }
         case AccessType.W0SRC => {
-          when(hitDoWrite && ~busif.writeData(x)){ret(idx).set()}
-            .elsewhen(hitDoRead)                 {ret(idx).clear()}
+          when(hitDoWrite && ~busif.writeData(x)){ ret.assignFromBits(B"0", idx, 1 bits) }
+            .elsewhen(hitDoRead)                 { ret.assignFromBits(B"1", idx, 1 bits) }
         }
         case AccessType.W0CRS => {
-          when(hitDoWrite && ~busif.writeData(x)){ret(idx).clear()}
-            .elsewhen(hitDoRead)                 {ret(idx).set()}
+          when(hitDoWrite && ~busif.writeData(x)){ ret.assignFromBits(B"1", idx, 1 bits) }
+            .elsewhen(hitDoRead)                 { ret.assignFromBits(B"0", idx, 1 bits) }
         }
         case _ =>
       }
@@ -344,26 +336,27 @@ abstract class RegBase(name: String, addr: Long, doc: String, busif: BusIf) {
     ret
   }
 
-  protected def WBP[T <: BitVector](dataType: HardType[T], section: Range, resetValue: Long, accType: AccessType): T ={
-    val resetValues = B(resetValue, dataType.getBitsWidth bit).as(dataType)
-    val ret = Reg(dataType) init resetValues
+  protected def WBP[T <: Data](dataType: HardType[T], section: Range, resetValue: Long, accType: AccessType): T = {
+    val resetValues = B(resetValue, dataType.getBitsWidth bit)
+    val ret = Reg(dataType) init resetValues.as(dataType)
     for(x <- section) {
       val idx = x - section.min
       accType match {
         case AccessType.W1P => {
-          when(hitDoWrite &&  busif.writeData(x)){ret(idx) := ~ret(idx)}
-            .otherwise{ret(idx) := False}
+          when(hitDoWrite &&  busif.writeData(x)){ ret.assignFromBits((~ret.asBits(idx)).asBits, idx, 1 bits) }
+            .otherwise{ ret.assignFromBits(B"0", idx, 1 bits) }
         }
         case AccessType.W0P => {
-          when(hitDoWrite && ~busif.writeData(x)){ret(idx) := ~ret(idx)}
-            .otherwise{ret(idx) := resetValues(idx)}
+          when(hitDoWrite && ~busif.writeData(x)){ ret.assignFromBits((~ret.asBits(idx)).asBits, idx, 1 bits) }
+            .otherwise{ ret.assignFromBits(resetValues.asBits(idx to idx), idx, 1 bits) }
         }
+        case _ =>
       }
     }
     ret
   }
 
-  protected def NA[T <: BitVector](dataType: HardType[T]): T = {
-    dataType().clearAll()
+  protected def NA[T <: Data](dataType: HardType[T]): T = {
+    clearAll(dataType())
   }
 }
