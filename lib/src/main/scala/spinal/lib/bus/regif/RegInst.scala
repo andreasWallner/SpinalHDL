@@ -43,20 +43,12 @@ class FIFOInst(name: String, addr: Long, doc:String, busif: BusIf) extends RegBa
 
 }
 
-case class DataFieldBuilder[T <: Data](register: RegInst, dataType: HardType[T], acc: AccessType, name: String) {
-  var reset : Option[Long] = None
-  var docString : Option[String] = None
+case class DataFieldBuilder[T <: Data](register: RegInst, dataType: HardType[T], acc: AccessType, name: String, reset: Option[Long]=None, docString: Option[String]=None) {
   def apply(): T = {
     register.makeField(this)
   }
-  def init(that: Long): DataFieldBuilder[T] = {
-    reset = Some(that)
-    this
-  }
-  def doc(doc: String): DataFieldBuilder[T] = {
-    docString = Some(doc)
-    this
-  }
+  def init(that: Long): DataFieldBuilder[T] = this.copy(reset=Some(that))
+  def doc(doc: String): DataFieldBuilder[T] = this.copy(docString=Some(doc))
 }
 
 case class RegInst(name: String, addr: Long, doc: String, busif: BusIf) extends RegBase(name, addr, doc, busif) {
@@ -134,10 +126,20 @@ case class RegInst(name: String, addr: Long, doc: String, busif: BusIf) extends 
     }
     val newdoc = if(doc.isEmpty && acc == AccessType.NA) "Reserved" else doc
     val nameRemoveNA = if(acc == AccessType.NA) "--" else name
+    checkSectionIsValid(section)
     fields   += Field(nameRemoveNA, ret, section, acc, 0, Rerror, newdoc)
     fieldPtr += width
 
     ret
+  }
+
+  def checkSectionIsValid(section: Section) = {
+    if (section.min < 0)
+      SpinalError("invalid section with min < 0")
+    if (section.max > busif.busDataWidth)
+      SpinalError("invalid section: end out of range")
+    if (fields.exists(other => (section.max < other.section.min && other.section.max > section.min)))
+      SpinalError("invalid section: overlaps with existing field")
   }
 
   def field(bc: BitCount, acc: AccessType, resetValue:Long = 0, doc: String = "")(implicit symbol: SymbolName): Bits = typed(Bits(bc), acc, resetValue, doc, symbol.name)
