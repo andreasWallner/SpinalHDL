@@ -43,6 +43,8 @@ trait BusIf extends BusIfBase {
     genCHead(getModuleName)
   })
 
+  def registers() : List[RegInst] = RegInsts.to[List]
+
   def newRegAt(address:Int, doc: String)(implicit symbol: SymbolName) = {
     assert(address % wordAddressInc == 0, s"located Position not align by wordAddressInc:${wordAddressInc}")
     assert(address >= regPtr, s"located Position conflict to Pre allocated Address:${regPtr}")
