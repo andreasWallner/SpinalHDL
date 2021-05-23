@@ -160,8 +160,6 @@ abstract class RegBase(name: String, addr: Long, doc: String, busif: BusIf) {
   protected var fieldPtr: Int = 0
   protected var Rerror: Boolean = false
 
-  def fieldss() : List[Field] = fields.to[List]
-
   def readErrorTag = Rerror
   def getFields = fields.toList
 

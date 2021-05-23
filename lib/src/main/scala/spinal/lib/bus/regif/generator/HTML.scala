@@ -50,7 +50,7 @@ class HTML(intf: BusIf) {
         """.stripMargin)
     
     writeField(register.getFields.last, writer)
-    register.fieldss.reverse.tail.map(field => {
+    register.getFields.reverse.tail.map(field => {
       writer.write("</tr><tr>")
       writeField(field, writer)
     })

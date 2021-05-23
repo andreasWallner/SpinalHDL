@@ -77,7 +77,7 @@ class CHeader(intf: BusIf) {
     writer.write(s"typedef union {\n")
     writer.write(s"  ${baseType} v;\n")
     writer.write(s" struct {\n")
-    reg.fieldss.foreach(field => {
+    reg.getFields.foreach(field => {
       val name = field.accType match {
         case AccessType.NA => f"rfu_${field.section.head}"
         case _ => field.name
@@ -96,7 +96,7 @@ class CHeader(intf: BusIf) {
 
   def writeFieldInfos(intf: BusIf, writer: Writer): Unit = {
     for(register <- intf.registers) {
-      for(field <- register.fieldss if field.accType != AccessType.NA) {
+      for(field <- register.getFields if field.accType != AccessType.NA) {
         val define = s"${name}_${register.name}_${field.name}".toUpperCase
         writer.write(s"#define ${define}_Pos ${field.section.end}\n")
         writer.write(f"#define ${define}_Msk 0x${bitmask(field.section)}%04x\n") // TODO use correct literal macro/postfix
