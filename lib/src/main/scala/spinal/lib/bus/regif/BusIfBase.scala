@@ -2,8 +2,6 @@ package spinal.lib.bus.regif
 
 import spinal.core._
 import spinal.lib.bus.amba3.apb._
-import RegIfDocument._
-import CHeads._
 import spinal.lib.bus.misc.SizeMapping
 import language.experimental.macros
 
@@ -39,8 +37,6 @@ trait BusIf extends BusIfBase {
 
   component.addPrePopTask(() => {
     readGenerator()
-    document(getModuleName)
-    genCHead(getModuleName)
   })
 
   def registers() : List[RegInst] = RegInsts.to[List]
@@ -75,17 +71,6 @@ trait BusIf extends BusIfBase {
     }
   }
 
-  def document(docName: String, docType: DocType = DocType.HTML) = {
-    docType match {
-      case DocType.Json =>
-      case DocType.Rst  =>
-      case DocType.MarkDown =>
-      case DocType.HTML => HTML(docName)
-      case DocType.Docx =>
-      case _ =>
-    }
-  }
-
   def FIFO(doc: String)(implicit symbol: SymbolName) = {
     val  res = creatReg(symbol.name, regPtr, doc)
     regPtr += wordAddressInc
@@ -110,40 +95,6 @@ trait BusIf extends BusIfBase {
       intWithMask +=  mask && stat
     })
     intWithMask.foldLeft(False)(_||_)
-  }
-
-//  @AutoInterrupt
-//  def interruptFactory2(regNamePre: String, triggers: Bool*): Bool = {
-//    triggers.size match {
-//      case 0 => SpinalError("There have no inputs Trigger signals")
-//      case x if x > busDataWidth => SpinalError(s"Trigger signal numbers exceed Bus data width ${busDataWidth}")
-//      case _ =>
-//    }
-//    False
-//  }
-
-  private def HTML(docName: String) = {
-    val pc = GlobalData.get.phaseContext
-    def targetPath = s"${pc.config.targetDirectory}/${docName}.html"
-    val body = RegInsts.map(_.trs(regPre)).mkString("\n")
-    val html = DocTemplate.getHTML(docName, body)
-    import java.io.PrintWriter
-    val fp = new PrintWriter(targetPath)
-    fp.write(html)
-    fp.close
-  }
-
-  def genCHead(cFileName: String) = {
-    val pc = GlobalData.get.phaseContext
-    def targetPath = s"${pc.config.targetDirectory}/${cFileName}.h"
-    val maxRegNameWidth = RegInsts.map(_.name.length).max + regPre.size
-    val heads   = RegInsts.map(_.cHeadDefine(maxRegNameWidth, regPre)).mkString("\n")
-    val structs = RegInsts.map(_.cStruct(regPre)).mkString("\n")
-    import java.io.PrintWriter
-    val fp = new PrintWriter(targetPath)
-    fp.write(heads)
-    fp.write("\n\n" + structs)
-    fp.close
   }
 
   def readGenerator() = {
