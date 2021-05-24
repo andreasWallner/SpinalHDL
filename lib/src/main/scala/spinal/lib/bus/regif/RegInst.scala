@@ -4,7 +4,7 @@ import spinal.core._
 import spinal.lib.bus.misc.SizeMapping
 import scala.collection.mutable.ListBuffer
 
-class Section(val max: Int, val min: Int){
+class Section(val max: Int, val min: Int) {
   override def toString(): String = {
     if(this.max == this.min) {
       s"[${this.min}]"
@@ -43,12 +43,28 @@ class FIFOInst(name: String, addr: Long, doc:String, busif: BusIf) extends RegBa
 
 }
 
-case class DataFieldBuilder[T <: Data](register: RegInst, dataType: HardType[T], acc: AccessType, name: String, reset: Option[Long]=None, docString: Option[String]=None) {
+case class DataFieldBuilder[T <: Data](
+    register: RegInst,
+    dataType: HardType[T],
+    acc: AccessType,
+    name: String,
+    reset: Option[Long] = None,
+    docString: Option[String] = None,
+    alignment: Option[Long] = None,
+    knownValues: List[KnownValue] = List())
+{
   def apply(): T = {
     register.makeField(this)
   }
   def init(that: Long): DataFieldBuilder[T] = this.copy(reset=Some(that))
   def doc(doc: String): DataFieldBuilder[T] = this.copy(docString=Some(doc))
+  def align(multiple: Long): DataFieldBuilder[T] = this.copy(alignment=Some(multiple))
+  def value(that: Long, name: String): DataFieldBuilder[T] = value(that, name, None)
+  def value(that: Long, name: String, doc: String): DataFieldBuilder[T] = value(that, name, Some(doc))
+  // TODO
+  //def value(that: T, name: String) = value(that.asL)
+  //def value(that: T, name: String, doc: String)
+  private def value(that: Long, name: String, doc: Option[String]): DataFieldBuilder[T] = this.copy(knownValues = (knownValues ++ List(KnownValue(that, name, doc))))
 }
 
 case class RegInst(name: String, addr: Long, doc: String, busif: BusIf) extends RegBase(name, addr, doc, busif) {
@@ -86,9 +102,9 @@ case class RegInst(name: String, addr: Long, doc: String, busif: BusIf) extends 
     DataFieldBuilder(this, dataType, acc, symbol.name)
 
   def makeField[T <: Data](builder: DataFieldBuilder[T]): T =
-    typed(builder.dataType, builder.acc, builder.reset.getOrElse(0), builder.docString.getOrElse(""), builder.name)
+    typed(builder.dataType, builder.acc, builder.reset.getOrElse(0), builder.docString.getOrElse(""), builder.name, builder.alignment.getOrElse(1), builder.knownValues)
 
-  def typed[T <: Data](dataType: HardType[T], acc: AccessType, resetValue: Long, doc: String, name: String): T = {
+  def typed[T <: Data](dataType: HardType[T], acc: AccessType, resetValue: Long, doc: String, name: String, alignment: Long = 1, knownValues: List[KnownValue] = List()): T = {
     if (acc == AccessType.RO && resetValue != 0)
       SpinalError("RO field can't have a reset value")
 
@@ -127,7 +143,7 @@ case class RegInst(name: String, addr: Long, doc: String, busif: BusIf) extends 
     val newdoc = if(doc.isEmpty && acc == AccessType.NA) "Reserved" else doc
     val nameRemoveNA = if(acc == AccessType.NA) "--" else name
     checkSectionIsValid(section)
-    fields   += Field(nameRemoveNA, ret, section, acc, 0, Rerror, newdoc)
+    fields   += Field(nameRemoveNA, ret, section, acc, 0, Rerror, newdoc, knownValues)
     fieldPtr += width
 
     ret
@@ -137,9 +153,12 @@ case class RegInst(name: String, addr: Long, doc: String, busif: BusIf) extends 
     if (section.min < 0)
       SpinalError("invalid section with min < 0")
     if (section.max > busif.busDataWidth)
-      SpinalError("invalid section: end out of range")
-    if (fields.exists(other => (section.max < other.section.min && other.section.max > section.min)))
-      SpinalError("invalid section: overlaps with existing field")
+      SpinalError(f"invalid section: end out of range, register is ${busif.busDataWidth} bits wide, ${section.max} bits would be needed")
+    val overlapping = fields.filter(other => (section.max < other.section.min && other.section.max > section.min))
+    if(!overlapping.isEmpty) {
+      val other = overlapping.head
+      SpinalError(f"invalid section: ${section} overlaps with existing field ${other.name} at ${other.section}")
+    }
   }
 
   def field(bc: BitCount, acc: AccessType, resetValue:Long = 0, doc: String = "")(implicit symbol: SymbolName): Bits = typed(Bits(bc), acc, resetValue, doc, symbol.name)

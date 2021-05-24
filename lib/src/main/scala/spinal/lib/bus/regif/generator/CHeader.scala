@@ -99,7 +99,9 @@ class CHeader(intf: BusIf) {
       for(field <- register.getFields if field.accType != AccessType.NA) {
         val define = s"${name}_${register.name}_${field.name}".toUpperCase
         writer.write(s"#define ${define}_Pos ${field.section.end}\n")
-        writer.write(f"#define ${define}_Msk 0x${bitmask(field.section)}%04x\n") // TODO use correct literal macro/postfix
+        writer.write(f"#define ${define}_Msk 0x${bitmask(field.section)}%x\n") // TODO use correct literal macro/postfix
+        for(kv <- field.knownValues)
+          writer.write(f"#define ${define}_${kv.name.toUpperCase()} 0x${kv.value}%x\n")
       }
     }
     writer.write("\n")
