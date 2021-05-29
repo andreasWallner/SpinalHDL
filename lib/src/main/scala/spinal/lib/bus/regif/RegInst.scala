@@ -50,7 +50,7 @@ case class DataFieldBuilder[T <: Data](
     name: String,
     reset: Option[Long] = None,
     docString: Option[String] = None,
-    alignment: Option[Long] = None,
+    alignment: Option[Integer] = None,
     knownValues: List[KnownValue] = List())
 {
   def apply(): T = {
@@ -58,7 +58,7 @@ case class DataFieldBuilder[T <: Data](
   }
   def init(that: Long): DataFieldBuilder[T] = this.copy(reset=Some(that))
   def doc(doc: String): DataFieldBuilder[T] = this.copy(docString=Some(doc))
-  def align(multiple: Long): DataFieldBuilder[T] = this.copy(alignment=Some(multiple))
+  def align(multiple: Integer): DataFieldBuilder[T] = this.copy(alignment=Some(multiple))
   def value(that: Long, name: String): DataFieldBuilder[T] = value(that, name, None)
   def value(that: Long, name: String, doc: String): DataFieldBuilder[T] = value(that, name, Some(doc))
   // TODO
@@ -104,12 +104,16 @@ case class RegInst(name: String, addr: Long, doc: String, busif: BusIf) extends 
   def makeField[T <: Data](builder: DataFieldBuilder[T]): T =
     typed(builder.dataType, builder.acc, builder.reset.getOrElse(0), builder.docString.getOrElse(""), builder.name, builder.alignment.getOrElse(1), builder.knownValues)
 
-  def typed[T <: Data](dataType: HardType[T], acc: AccessType, resetValue: Long, doc: String, name: String, alignment: Long = 1, knownValues: List[KnownValue] = List()): T = {
+  def typed[T <: Data](dataType: HardType[T], acc: AccessType, resetValue: Long, doc: String, name: String, alignment: Integer = 1, knownValues: List[KnownValue] = List()): T = {
     if (acc == AccessType.RO && resetValue != 0)
       SpinalError("RO field can't have a reset value")
 
     val width = dataType.getBitsWidth
-    val section: Range = (fieldPtr + width - 1) downto fieldPtr
+    val alignedFieldPtr = fieldPtr + ((4 - (fieldPtr % alignment)) % alignment) 
+    print(f"${name} ${alignedFieldPtr} ${alignment}\n")
+    if (alignedFieldPtr != fieldPtr)
+      typed(Bits((alignedFieldPtr - fieldPtr) bits), AccessType.NA, 0, "", "")
+    val section: Range = (alignedFieldPtr + width - 1) downto alignedFieldPtr
     val ret : T = acc match {
       case AccessType.RO => RO(dataType)
       case AccessType.RW    => W(dataType, section, resetValue)  //- W: as-is, R: no effect
